@@ -22,6 +22,8 @@ import cv2
 import numpy as np
 import RPi.GPIO as GPIO
 
+import math
+
 """
 # GPIO 번호 규칙 지정 + 핀 지정
 GPIO.setmode(GPIO.BCM)      # GPIO 핀들의 번호를 지정하는 규칙 설정
@@ -60,15 +62,26 @@ ser = serial.Serial(                # serial 객체
 
 # 카메라 설정, 화면 사이즈, hsv
 # cap = cv2.VideoCapture(cv2.CAP_DSHOW + 1)
-cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
+cap = cv2.VideoCapture(1, cv2.CAP_V4L2)
 W_View_size = 320
 H_View_size = 240
 '''cap.set(3, W_View_size)
 cap.set(4, H_View_size)'''
 
-green_hue = 70
-green_low_th = 60
+# green
+green_hue = 65
+green_low_th = 90
 green_up_th = 255
+
+#blue
+blue_hue = 117
+blue_low_th = 100
+blue_up_th = 255
+
+#red
+red_hue = 180
+red_low_th = 110
+red_up_th = 255
 
 # 원통 크기 기준, 통신 데이터 리스트
 green_small = W_View_size * H_View_size * 0.005
@@ -121,7 +134,7 @@ while True:
     fps = 1/sec
     FPS.append(fps)
     count=count+1
-    if(count==50):
+    if(count==20):
         print(np.mean(FPS))
         FPS=[]
         count=0
@@ -133,52 +146,128 @@ while True:
 
     # hsv 변환, 마스크 형성, 노이즈 제거, 특징 추출
     img_hsv = cv2.cvtColor(img_color, cv2.COLOR_BGR2HSV)
-    img_mask = masking(img_hsv, green_hue, green_low_th, green_up_th)
-    img_result = cv2.bitwise_and(img_color, img_color, mask=img_mask)
-    numOfLabels, img_label, stats, centroids = cv2.connectedComponentsWithStats(img_mask)
+    img_mask_g = masking(img_hsv, green_hue, green_low_th, green_up_th)
+    img_result_g = cv2.bitwise_and(img_color, img_color, mask=img_mask_g)
+    numOfLabels_g, img_label_g, stats_g, centroids_g = cv2.connectedComponentsWithStats(img_mask_g)
+    
+    img_mask_r = masking(img_hsv, red_hue, red_low_th, red_up_th)
+    img_result_r = cv2.bitwise_and(img_color, img_color, mask=img_mask_r)
+    numOfLabels_r, img_label_r, stats_r, centroids_r = cv2.connectedComponentsWithStats(img_mask_r)
+    
+    img_mask_b = masking(img_hsv, blue_hue, blue_low_th, blue_up_th)
+    img_result_b = cv2.bitwise_and(img_color, img_color, mask=img_mask_b)
+    numOfLabels_b, img_label_b, stats_b, centroids_b = cv2.connectedComponentsWithStats(img_mask_b)
     
     # 특징 전처리
-    areavs = 0 # while문 돌때마다 초기화
-    for idx, centroid in enumerate(centroids):
-        if stats[idx][0] == 0 and stats[idx][1] == 0:
+    areavs_g = 0 # while문 돌때마다 초기화
+    for idx_g, centroid_g in enumerate(centroids_g):
+        if stats_g[idx_g][0] == 0 and stats_g[idx_g][1] == 0:
             continue
-        if np.any(np.isnan(centroid)):
+        if np.any(np.isnan(centroid_g)):
             continue
-        x, y, width, height, area = stats[idx]
+        x_g, y_g, width_g, height_g, area_g = stats_g[idx_g]
 
-        centerX, centerY = int(centroid[0]), int(centroid[1])
-        if area > areavs:
-            xvs = x
-            widthvs = width
-            areavs = area
-            centervsX_R = centerX
-            centervsY_R = centerY
-    
-    # 결과 연산, 시리얼 통신
+        centerX_g, centerY_g = int(centroid_g[0]), int(centroid_g[1])
+        if area_g > areavs_g:
+            xvs_g = x_g
+            widthvs_g = width_g
+            areavs_g = area_g
+            centervsX_R_g = centerX_g
+            centervsY_R_g = centerY_g
+    if areavs_g > 80:  # 크기가 80 이상이면 동그라미, 사각형인정
+        cv2.circle(img_color, (centervsX_R_g, centervsY_R_g), 10, (0, 255, 0), 10)
+
+    areavs_r = 0 # while문 돌때마다 초기화
+    for idx_r, centroid_r in enumerate(centroids_r):
+        if stats_r[idx_r][0] == 0 and stats_r[idx_r][1] == 0:
+            continue
+        if np.any(np.isnan(centroid_r)):
+            continue
+        x_r, y_r, width_r, height_r, area_r = stats_r[idx_r]
+
+        centerX_r, centerY_r = int(centroid_r[0]), int(centroid_r[1])
+        if area_r > areavs_r:
+            xvs_r = x_r
+            widthvs_r = width_r
+            areavs_r = area_r
+            centervsX_R_r = centerX_r
+            centervsY_R_r = centerY_r
+    if areavs_r > 80:  # 크기가 80 이상이면 동그라미, 사각형인정
+        cv2.circle(img_color, (centervsX_R_r, centervsY_R_r), 10, (0, 0, 255), 10)
+
+    areavs_b = 0 # while문 돌때마다 초기화
+    for idx_b, centroid_b in enumerate(centroids_b):
+        if stats_b[idx_b][0] == 0 and stats_b[idx_b][1] == 0:
+            continue
+        if np.any(np.isnan(centroid_b)):
+            continue
+        x_b, y_b, width_b, height_b, area_b = stats_b[idx_b]
+
+        centerX_b, centerY_b = int(centroid_b[0]), int(centroid_b[1])
+        if area_b > areavs_b:
+            xvs_b = x_b
+            widthvs_b = width_b
+            areavs_b = area_b
+            centervsX_R_b = centerX_b
+            centervsY_R_b = centerY_b
+    if areavs_b > 80:  # 크기가 80 이상이면 동그라미, 사각형인정
+        cv2.circle(img_color, (centervsX_R_b, centervsY_R_b), 10, (255, 0, 0), 10)
+    if ('centervsX_R_b' in globals()) and ('centervsY_R_b' in globals()) and ('centervsX_R_r' in globals()) and ('centervsY_R_r' in globals()) and ('centervsY_R_g' in globals()) and ('centervsY_R_g' in globals()):
+        cv2.line(img_color, (centervsX_R_b,centervsY_R_b), (centervsX_R_r,centervsY_R_r), (255,255,255), 3)
+        cv2.line(img_color, (centervsX_R_b,centervsY_R_b), (centervsX_R_g,centervsY_R_g), (255,255,255), 3)
+        rad_br = math.atan2(centervsX_R_b - centervsX_R_r, centervsY_R_b - centervsY_R_r)
+        rad_bg = math.atan2(centervsX_R_b - centervsX_R_g, centervsY_R_b - centervsY_R_g)
+        PI = math.pi
+        deg_br = (rad_br*180)/PI
+        deg_bg = (rad_bg*180)/PI
+        if(deg_br < 0):
+            deg_br = 360 - abs(deg_br)
+        if(deg_bg < 0):
+            deg_bg = 360 - abs(deg_bg)
+            
+        if(deg_br <= deg_bg):
+            if((deg_bg - deg_br) < 180):
+                result = deg_bg - deg_br
+                turn = 'left'
+            else:
+                result = deg_br -(deg_bg - 360)
+                turn = 'right'
+        elif(deg_bg < deg_br): # bg, br
+            if((deg_br - deg_bg) < 180):
+                result = deg_br - deg_bg
+                turn = 'right'
+            else:
+                result = deg_bg -(deg_br - 360)
+                turn = 'left'
+        print("deg_br :", deg_br)
+        print("deg_bg :", deg_bg)
+        print("turn :", turn)
+        print("result :", result)
+# 결과 연산, 시리얼 통신
     ras_res = ""
     temp = 0
-    if stats[idx][0] != 0 or stats[idx][1] != 0:
-        if(centervsX_R < W_View_size * 4 / 11):
+    if stats_g[idx_g][0] != 0 or stats_g[idx_g][1] != 0:
+        if(centervsX_R_g < W_View_size * 4 / 11):
             ras_res += "1"
             temp = 1
-        elif(W_View_size * 4 / 11 <= centervsX_R <= W_View_size * 7 / 11):
+        elif(W_View_size * 4 / 11 <= centervsX_R_g <= W_View_size * 7 / 11):
             ras_res += "2"
             temp = 2
-        elif(W_View_size * 7 / 11 < centervsX_R):
+        elif(W_View_size * 7 / 11 < centervsX_R_g):
             ras_res += "3"
             temp = 3
 
-        if(areavs < green_small):
+        if(areavs_g < green_small):
             ras_res += ",0"
-        elif(green_small <= areavs <= green_big):
+        elif(green_small <= areavs_g <= green_big):
             ras_res += ",1"
-        elif(green_big < areavs):
+        elif(green_big < areavs_g):
             ras_res += ",2"
         
         # 시각화
         # print('fps : ', fps, '/centervsX_R : ', centervsX_R, '/ras_res : ', ras_res)
         # print('/fps : ', fps, '/areavs : ', areavs, '/centervsX_R : ', centervsX_R, '/centervsY_R : ', centervsY_R)
-        cv2.circle(img_color, (centervsX_R, centervsY_R), 10, (0, 0, 255), 10)
+        cv2.circle(img_color, (centervsX_R_g, centervsY_R_g), 10, (0, 0, 255), 10)
     else:
         ras_res += "9,9"
 
@@ -211,7 +300,9 @@ while True:
 
     # 시각화
     cv2.imshow('img_color', img_color)
-    cv2.imshow('img_mask', img_mask)
+    cv2.imshow('img_mask_g', img_mask_g)
+    cv2.imshow('img_mask_r', img_mask_r)
+    cv2.imshow('img_mask_b', img_mask_b)
     #cv2.imshow('img_result', img_result)
 
     # 카메라 종료 조건
