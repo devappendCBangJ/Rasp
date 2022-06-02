@@ -24,45 +24,16 @@ import RPi.GPIO as GPIO
 
 import math
 
-"""
-# GPIO 번호 규칙 지정 + 핀 지정
-GPIO.setmode(GPIO.BCM)      # GPIO 핀들의 번호를 지정하는 규칙 설정
-servo_pin = 12                   # 서보핀은 라즈베리파이 GPIO 12번핀으로 
-GPIO.setup(servo_pin, GPIO.OUT)  # 서보핀을 출력으로 설정 
-servo = GPIO.PWM(servo_pin, 50)  # 서보핀을 PWM 모드 50Hz로 사용
-servo.start(90)  # 서보모터의 초기값을 0으로 설정
-
-servo_min_duty = 3               # 최소 듀티비를 3으로
-servo_max_duty = 12              # 최대 듀티비를 12로
-
-def servo_move(degree):    # 각도를 입력하면 듀티비를 알아서 설정해주는 함수
-    # 각도는 최소0, 최대 180으로 설정
-    if degree > 180:
-        degree = 180
-    elif degree < 0:
-        degree = 0
-
-    # 입력한 각도(degree)를 듀티비로 환산하는 식
-    # servo.start(degree)
-    duty = servo_min_duty+(degree*(servo_max_duty-servo_min_duty)/180.0)
-    # 환산한 듀티비를 서보모터에 전달
-    servo.ChangeDutyCycle(duty)
-    # servo.stop()
-"""
-
 # 시리얼 설정
 ser = serial.Serial(                # serial 객체
-    port = '/dev/ttyAMA1',          # serial통신 포트
-    baudrate = 115200,              # serial통신 속도
-    parity = serial.PARITY_EVEN,    # 패리티 비트 설정
-    stopbits = serial.STOPBITS_ONE, # 스톱 비트 설정
-    bytesize = serial.EIGHTBITS,    # 데이터 비트수
+    port = '/dev/ttyACM0',          # serial통신 포트
+    baudrate = 9600,              # serial통신 속도
     timeout = 1                     # 타임 아웃 설정
 )
 
 # 카메라 설정, 화면 사이즈, hsv
 # cap = cv2.VideoCapture(cv2.CAP_DSHOW + 1)
-cap = cv2.VideoCapture(1, cv2.CAP_V4L2)
+cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
 W_View_size = 320
 H_View_size = 240
 '''cap.set(3, W_View_size)
@@ -83,6 +54,11 @@ red_hue = 180
 red_low_th = 110
 red_up_th = 255
 
+#yellow
+yellow_hue = 15
+yellow_low_th = 100
+yellow_up_th = 255
+
 # 원통 크기 기준, 통신 데이터 리스트
 green_small = W_View_size * H_View_size * 0.005
 green_big = W_View_size * H_View_size * 0.01
@@ -91,12 +67,21 @@ ras_res= ""
 # 타이머
 curTime = 0
 prevTime = 0
+count=0
+FPS=list()
+
+# 통신 초기값
+turn = '99'
+ang = 99
+
+# 모드 초기값
+mode = 1
 
 # mask 형성, 노이즈 제거, 마스크 리턴
 def masking(img_hsv, hue, low_th, up_th):
     if hue < 10:
         lower1 = np.array([hue - 10 + 180, low_th, low_th])
-        upper1 = np.array([180, up_th_th, up_th])
+        upper1 = np.array([180, up_th, up_th])
         lower2 = np.array([0, low_th, low_th])
         upper2 = np.array([hue, up_th, up_th])
         lower3 = np.array([hue, low_th, low_th])
@@ -125,10 +110,9 @@ def masking(img_hsv, hue, low_th, up_th):
     img_mask = cv2.morphologyEx(img_mask, cv2.MORPH_OPEN, kernel)
     img_mask = cv2.morphologyEx(img_mask, cv2.MORPH_CLOSE, kernel)
     return img_mask
-count=0
-FPS=list()
-ang = 90
+
 while True:
+    # fps 측정
     curTime = time.time()
     sec = curTime - prevTime
     fps = 1/sec
@@ -158,8 +142,14 @@ while True:
     img_result_b = cv2.bitwise_and(img_color, img_color, mask=img_mask_b)
     numOfLabels_b, img_label_b, stats_b, centroids_b = cv2.connectedComponentsWithStats(img_mask_b)
     
-    # 특징 전처리
+    img_mask_y = masking(img_hsv, yellow_hue, yellow_low_th, yellow_up_th)
+    img_result_b = cv2.bitwise_and(img_color, img_color, mask=img_mask_y)
+    numOfLabels_y, img_label_y, stats_y, centroids_y = cv2.connectedComponentsWithStats(img_mask_y)
+    
+    # 특징 전처리 - green
     areavs_g = 0 # while문 돌때마다 초기화
+    centervsX_R_g = 0
+    centervsY_R_g = 0
     for idx_g, centroid_g in enumerate(centroids_g):
         if stats_g[idx_g][0] == 0 and stats_g[idx_g][1] == 0:
             continue
@@ -174,10 +164,13 @@ while True:
             areavs_g = area_g
             centervsX_R_g = centerX_g
             centervsY_R_g = centerY_g
-    if areavs_g > 80:  # 크기가 80 이상이면 동그라미, 사각형인정
+    if areavs_g > 80:  # 크기가 80 이상이면 물체로 인정
         cv2.circle(img_color, (centervsX_R_g, centervsY_R_g), 10, (0, 255, 0), 10)
 
+    # 특징 전처리 - red
     areavs_r = 0 # while문 돌때마다 초기화
+    centervsX_R_r = 0
+    centervsY_R_r = 0
     for idx_r, centroid_r in enumerate(centroids_r):
         if stats_r[idx_r][0] == 0 and stats_r[idx_r][1] == 0:
             continue
@@ -195,7 +188,10 @@ while True:
     if areavs_r > 80:  # 크기가 80 이상이면 동그라미, 사각형인정
         cv2.circle(img_color, (centervsX_R_r, centervsY_R_r), 10, (0, 0, 255), 10)
 
+    # 특징 전처리 - blue
     areavs_b = 0 # while문 돌때마다 초기화
+    centervsX_R_b = 0
+    centervsY_R_b = 0
     for idx_b, centroid_b in enumerate(centroids_b):
         if stats_b[idx_b][0] == 0 and stats_b[idx_b][1] == 0:
             continue
@@ -212,97 +208,132 @@ while True:
             centervsY_R_b = centerY_b
     if areavs_b > 80:  # 크기가 80 이상이면 동그라미, 사각형인정
         cv2.circle(img_color, (centervsX_R_b, centervsY_R_b), 10, (255, 0, 0), 10)
-    if ('centervsX_R_b' in globals()) and ('centervsY_R_b' in globals()) and ('centervsX_R_r' in globals()) and ('centervsY_R_r' in globals()) and ('centervsY_R_g' in globals()) and ('centervsY_R_g' in globals()):
-        cv2.line(img_color, (centervsX_R_b,centervsY_R_b), (centervsX_R_r,centervsY_R_r), (255,255,255), 3)
-        cv2.line(img_color, (centervsX_R_b,centervsY_R_b), (centervsX_R_g,centervsY_R_g), (255,255,255), 3)
-        rad_br = math.atan2(centervsX_R_b - centervsX_R_r, centervsY_R_b - centervsY_R_r)
-        rad_bg = math.atan2(centervsX_R_b - centervsX_R_g, centervsY_R_b - centervsY_R_g)
-        PI = math.pi
-        deg_br = (rad_br*180)/PI
-        deg_bg = (rad_bg*180)/PI
-        if(deg_br < 0):
-            deg_br = 360 - abs(deg_br)
-        if(deg_bg < 0):
-            deg_bg = 360 - abs(deg_bg)
-            
-        if(deg_br <= deg_bg):
-            if((deg_bg - deg_br) < 180):
-                result = deg_bg - deg_br
-                turn = 'left'
-            else:
-                result = deg_br -(deg_bg - 360)
-                turn = 'right'
-        elif(deg_bg < deg_br): # bg, br
-            if((deg_br - deg_bg) < 180):
-                result = deg_br - deg_bg
-                turn = 'right'
-            else:
-                result = deg_bg -(deg_br - 360)
-                turn = 'left'
-        print("deg_br :", deg_br)
-        print("deg_bg :", deg_bg)
-        print("turn :", turn)
-        print("result :", result)
-# 결과 연산, 시리얼 통신
-    ras_res = ""
-    temp = 0
-    if stats_g[idx_g][0] != 0 or stats_g[idx_g][1] != 0:
-        if(centervsX_R_g < W_View_size * 4 / 11):
-            ras_res += "1"
-            temp = 1
-        elif(W_View_size * 4 / 11 <= centervsX_R_g <= W_View_size * 7 / 11):
-            ras_res += "2"
-            temp = 2
-        elif(W_View_size * 7 / 11 < centervsX_R_g):
-            ras_res += "3"
-            temp = 3
+    
+    # 특징 전처리 - yellow
+    areavs_y = 0 # while문 돌때마다 초기화
+    centervsX_R_y = 0
+    centervsY_R_y = 0
+    for idx_y, centroid_y in enumerate(centroids_y):
+        if stats_y[idx_y][0] == 0 and stats_y[idx_y][1] == 0:
+            continue
+        if np.any(np.isnan(centroid_y)):
+            continue
+        x_y, y_y, width_y, height_y, area_y = stats_y[idx_y]
 
-        if(areavs_g < green_small):
-            ras_res += ",0"
-        elif(green_small <= areavs_g <= green_big):
-            ras_res += ",1"
-        elif(green_big < areavs_g):
-            ras_res += ",2"
+        centerX_y, centerY_y = int(centroid_y[0]), int(centroid_y[1])
+        if area_y > areavs_y:
+            xvs_y = x_y
+            widthvs_y = width_y
+            areavs_y = area_y
+            centervsX_R_y = centerX_y
+            centervsY_R_y = centerY_y
+    if areavs_y > 80:  # 크기가 80 이상이면 동그라미, 사각형인정
+        cv2.circle(img_color, (centervsX_R_y, centervsY_R_y), 10, (0, 255, 255), 10)
+    
+    # main 움직임 판단
+    if(mode == 1):
+        # 목적지까지의 각도 계산
+        if ('centervsX_R_b' in globals()) and ('centervsY_R_b' in globals()) and ('centervsX_R_r' in globals()) and ('centervsY_R_r' in globals()) and ('centervsY_R_g' in globals()) and ('centervsY_R_g' in globals()):
+            cv2.line(img_color, (centervsX_R_b,centervsY_R_b), (centervsX_R_r,centervsY_R_r), (255,255,255), 3)
+            cv2.line(img_color, (centervsX_R_b,centervsY_R_b), (centervsX_R_g,centervsY_R_g), (255,255,255), 3)
+            rad_br = math.atan2(centervsX_R_b - centervsX_R_r, centervsY_R_b - centervsY_R_r)
+            rad_bg = math.atan2(centervsX_R_b - centervsX_R_g, centervsY_R_b - centervsY_R_g)
+            PI = math.pi
+            deg_br = (rad_br*180)/PI
+            deg_bg = (rad_bg*180)/PI
+            if(deg_br < 0):
+                deg_br = 360 - abs(deg_br)
+            if(deg_bg < 0):
+                deg_bg = 360 - abs(deg_bg)
+                
+            if(deg_br <= deg_bg):
+                if((deg_bg - deg_br) < 180):
+                    ang = deg_bg - deg_br
+                    turn = '0' # left turn
+                else:
+                    ang = deg_br -(deg_bg - 360)
+                    turn = '2' # right turn
+            elif(deg_bg < deg_br): # bg, br
+                if((deg_br - deg_bg) < 180):
+                    ang = deg_br - deg_bg
+                    turn = '2' # right turn
+                else:
+                    ang = deg_bg -(deg_br - 360)
+                    turn = '0' # left turn
+            
+            # 중심점 사이 거리
+            center_len = ((centervsX_R_r-centervsX_R_g)**2 + (centervsY_R_r-centervsY_R_g)**2)**(1/2)
+            print("물체 사이 거리 : ", center_len)
+            if(center_len <= 60 and ang <= 20):
+                turn = '3'
+                mode = 2
+            elif(center_len > 60 and ang <= 20):
+                turn = '1'
+                
+    if(mode == 2):
+        # 목적지까지의 각도 계산
+        if ('centervsX_R_b' in globals()) and ('centervsY_R_b' in globals()) and ('centervsX_R_r' in globals()) and ('centervsY_R_r' in globals()) and ('centervsY_R_y' in globals()) and ('centervsY_R_y' in globals()):
+            cv2.line(img_color, (centervsX_R_b,centervsY_R_b), (centervsX_R_r,centervsY_R_r), (255,255,255), 3)
+            cv2.line(img_color, (centervsX_R_b,centervsY_R_b), (centervsX_R_y,centervsY_R_y), (255,255,255), 3)
+            rad_br = math.atan2(centervsX_R_b - centervsX_R_r, centervsY_R_b - centervsY_R_r)
+            rad_by = math.atan2(centervsX_R_b - centervsX_R_y, centervsY_R_b - centervsY_R_y)
+            PI = math.pi
+            deg_br = (rad_br*180)/PI
+            deg_by = (rad_by*180)/PI
+            if(deg_br < 0):
+                deg_br = 360 - abs(deg_br)
+            if(deg_by < 0):
+                deg_by = 360 - abs(deg_by)
+                
+            if(deg_br <= deg_by):
+                if((deg_by - deg_br) < 180):
+                    ang = deg_by - deg_br
+                    turn = '0' # left turn
+                else:
+                    ang = deg_br -(deg_by - 360)
+                    turn = '2' # right turn
+            elif(deg_by < deg_br): # bg, br
+                if((deg_br - deg_by) < 180):
+                    ang = deg_br - deg_by
+                    turn = '2' # right turn
+                else:
+                    ang = deg_by -(deg_br - 360)
+                    turn = '0' # left turn
+            
+            # 중심점 사이 거리
+            center_len = ((centervsX_R_y-centervsX_R_y)**2 + (centervsY_R_r-centervsY_R_g)**2)**(1/2)
+            print("물체 사이 거리 : ", center_len)
+            if(center_len <= 30 and ang <= 20):
+                turn = '3'
+                mode = 1
+            elif(center_len > 30 and ang <= 20):
+                turn = '1'
+        
+        # # 확인용 코드
+        # print("deg_br :", deg_br)
+        # print("deg_bg :", deg_bg)
+        # print("turn :", turn)
+        # print("ang :", ang)
+        
+    # 결과 연산, 시리얼 통신
+    ras_res = ""
+    
+    ras_res += str(int(ang))
+    ras_res += ','
+    ras_res += str(turn)
+    print("통신값(방향, 각도) : ", ras_res) # 확인용 코드
+    ser.write(ras_res.encode())
         
         # 시각화
         # print('fps : ', fps, '/centervsX_R : ', centervsX_R, '/ras_res : ', ras_res)
         # print('/fps : ', fps, '/areavs : ', areavs, '/centervsX_R : ', centervsX_R, '/centervsY_R : ', centervsY_R)
-        cv2.circle(img_color, (centervsX_R_g, centervsY_R_g), 10, (0, 0, 255), 10)
-    else:
-        ras_res += "9,9"
-
-    ras_res += ",9/"
-    
-    if(temp == 1):
-        # ang -= 3
-        pass
-    elif(temp == 2):
-        # ang = ang
-        pass
-    elif(temp == 3):
-        # ang += 3
-        pass
-    # servo_move(ang)
-    # print("ang : ", ang)
-
-
-    # 시리얼 쓰기
-    #for i in range(len(ras_res)):
-        # print(ras_res[i])
-        # ser.write(ras_res[i].encode())
-        # time.sleep(0.005)
-    # 시리얼 쓰기
-    ser.write(ras_res.encode())
-    # 시리얼 읽기
-    '''if ser.readable():
-        res = ser.readline()
-        print(res.decode()[:len(res) - 1])'''
 
     # 시각화
     cv2.imshow('img_color', img_color)
     cv2.imshow('img_mask_g', img_mask_g)
     cv2.imshow('img_mask_r', img_mask_r)
     cv2.imshow('img_mask_b', img_mask_b)
+    cv2.imshow('img_mask_y', img_mask_y)
     #cv2.imshow('img_result', img_result)
 
     # 카메라 종료 조건
