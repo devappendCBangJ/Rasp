@@ -164,7 +164,7 @@ while True:
             areavs_g = area_g
             centervsX_R_g = centerX_g
             centervsY_R_g = centerY_g
-    if areavs_g > 80:  # 크기가 80 이상이면 물체로 인정
+    if areavs_g > 80:  # 크기가 80 이상이면 동그라미, 사각형인정
         cv2.circle(img_color, (centervsX_R_g, centervsY_R_g), 10, (0, 255, 0), 10)
 
     # 특징 전처리 - red
@@ -264,10 +264,10 @@ while True:
             # 중심점 사이 거리
             center_len = ((centervsX_R_r-centervsX_R_g)**2 + (centervsY_R_r-centervsY_R_g)**2)**(1/2)
             print("물체 사이 거리 : ", center_len)
-            if(center_len <= 60 and ang <= 20):
+            if(center_len <= 80 and ang <= 20):
                 turn = '3'
                 mode = 2
-            elif(center_len > 60 and ang <= 20):
+            elif(center_len > 80 and ang <= 20):
                 turn = '1'
                 
     if(mode == 2):
@@ -296,12 +296,13 @@ while True:
                 if((deg_br - deg_by) < 180):
                     ang = deg_br - deg_by
                     turn = '2' # right turn
+                    time.sleep(2)
                 else:
                     ang = deg_by -(deg_br - 360)
                     turn = '0' # left turn
             
             # 중심점 사이 거리
-            center_len = ((centervsX_R_y-centervsX_R_y)**2 + (centervsY_R_r-centervsY_R_g)**2)**(1/2)
+            center_len = ((centervsX_R_r-centervsX_R_y)**2 + (centervsY_R_r-centervsY_R_y)**2)**(1/2)
             print("물체 사이 거리 : ", center_len)
             if(center_len <= 30 and ang <= 20):
                 turn = '3'
@@ -317,6 +318,7 @@ while True:
         
     # 결과 연산, 시리얼 통신
     ras_res = ""
+    temp = 0
     
     ras_res += str(int(ang))
     ras_res += ','

@@ -8,7 +8,7 @@ text1 = 'Press ESC to extract Green'
 text2 = 'Press ESC to extract Blue'
 text3 = 'Press ESC to extract Red'
 
-cap = cv2.VideoCapture(1, cv2.CAP_V4L2)
+cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
 W_View_size = 400
 H_View_size = 300
 

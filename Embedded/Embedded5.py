@@ -21,7 +21,8 @@ isColored = 0          # 색깔이 입력 됬나
 colorMode = 0          # colorMode = 1 : 빨 colorMode = 2 :파  colorMode = 3 :초
 isEnd = 0              #  안끝났음 isEnd =1 끝났음
 servo_stop ="0"
-cnt =0
+cnt =""
+
 ##################################################################
 lower_green = (56,46 , 87)
 upper_green = (76, 255, 255)
@@ -100,9 +101,11 @@ while (True):
         which_color()
 
     #ser.write(bytes(servo_stop, encoding='ascii'))    #서보모터 멈추라는 신호
-    # if ser.readable():
-    #     ser.timeout = 0
-    #     mode = ser.readline()
+    if ser.readable():
+        ser.timeout = 0
+        cnt = ser.read().decode()
+        if(cnt == '9'):
+            print(cnt)
    
 
 
