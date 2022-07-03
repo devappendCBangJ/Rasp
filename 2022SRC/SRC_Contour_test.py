@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import RPi.GPIO as GPIO
 from collections import deque
+
 # GPIO 번호 규칙 지정 + 핀 지정
 '''
 GPIO.setmode(GPIO.BCM)      # GPIO 핀들의 번호를 지정하는 규칙 설정
@@ -48,20 +49,24 @@ H_View_size = 300
 '''cap.set(3, W_View_size)
 cap.set(4, H_View_size)'''
 
-
+'''
 #green
-#lower_green = (50,45,62)
-#upper_green = (75,239,216)
+lower_green = (55,60,110)
+upper_green = (75,255,230)
+'''
+#green
+lower_green = (54,110,80)
+upper_green = (65,215,195)
 
-lower_green = (36,72,78)
-upper_green = (70,255,219)
 #blue
-lower_blue = (103, 170, 80)
-upper_blue = (110, 255, 194)
+lower_blue = (102, 150, 90)
+upper_blue = (110, 255, 200)
 #red
-lower_red = (173, 109, 150)
-upper_red = (175, 232, 230)
+lower_red1 = (1, 130, 150)
+upper_red1 = (4, 175, 230)
 
+lower_red2 = (0, 125, 130)
+upper_red2 = (1, 175, 200)
 # 원통 크기 기준, 통신 데이터 리스트
 green_small = W_View_size * H_View_size * 0.0005
 green_middle = W_View_size * H_View_size * 0.0025
@@ -80,6 +85,8 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT,240)
 
 kernel = np.ones((5, 5), np.uint8)
 
+rx,rw =0,0
+    
 def Masking(img_hsv,lower,upper):
     
     img_mask = cv2.inRange(img_hsv, lower, upper)
@@ -94,12 +101,30 @@ def get_contour(contours):
     for contour in contours: # 컨투어 제일 넓이 큰거 하나만 구하는 과정
         area = cv2.contourArea(contour)
         #print(area)
-        if cv2.contourArea(contour) < 40:  #  너무 작으면 무시(노이즈제거)
+        if cv2.contourArea(contour) < 20:  #  너무 작으면 무시(노이즈제거)
             continue
         if area>max_area:
             max_area = area
             max_contour = contour
     return max_area,max_contour
+
+def get_contour_red(contours):
+    max_contour = None
+    second_contour = None
+    max_area = -1
+    second_area = -1
+    for contour in contours: # 컨투어 제일 넓이 큰거 하나만 구하는 과정
+        area = cv2.contourArea(contour)
+        if cv2.contourArea(contour) < 100:  #  너무 작으면 무시(노이즈제거)
+            continue
+        if area>max_area:
+            if max_area<area:
+                max_area = area
+                max_contour = contour
+        elif max_area>area and area>second_area:
+            second_area = area
+            second_contour = contour
+    return max_area,max_contour, second_area,second_contour
 
 #ang = 90
 
@@ -127,85 +152,89 @@ while True:
     img_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     bin_image1 = Masking(img_hsv,lower_green,upper_green)
     bin_image2 = Masking(img_hsv,lower_blue,upper_blue)
-    bin_image3 = Masking(img_hsv,lower_red,upper_red)
+    bin_image3 = Masking(img_hsv,lower_red1,upper_red1)|Masking(img_hsv,lower_red2,upper_red2)
     bin_image4 = bin_image1|bin_image2|bin_image3
 
     #컨투어
     contours_green, _ = cv2.findContours(bin_image1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    contours_red, _ = cv2.findContours(bin_image2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    contours_blue, _ = cv2.findContours(bin_image3, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    
-    '''
-    max_contour = None
-    max_area = -1
-    
-    for contour in contours # 컨투어 제일 넓이 큰거 하나만 구하는 과정
-        area = cv2.contourArea(contour)
-        #print(area)
-        if cv2.contourArea(contour) < 40:  #  너무 작으면 무시(노이즈제거)
-            continue
-        if area>max_area:
-            max_area = area
-            max_contour = contour
-    '''
+    contours_red, _ = cv2.findContours(bin_image3, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    contours_blue, _ = cv2.findContours(bin_image2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     
     
+    #컨투어 영역 제일 넓은 부분만 구하기(빨간색은 2번쨰까지)
     max_areaG, max_contourG = get_contour(contours_green)
-    max_areaR, max_contourR = get_contour(contours_red)
+    max_areaR, max_contourR, second_areaR, second_contourR = get_contour_red(contours_red)
     max_areaB, max_contourB = get_contour(contours_blue)
     gx, gy, gw, gh = cv2.boundingRect(max_contourG)
-    rx, ry, rw, rh = cv2.boundingRect(max_contourR)
+    rx1, ry1, rw1, rh1 = cv2.boundingRect(max_contourR)
+    rx2, ry2, rw2, rh2 = cv2.boundingRect(second_contourR)
+
+    if second_areaR == -1:
+        rx = rx1
+        rw = rw1
+        inside = True
+    else:
+        if rx1 > rx2:
+            rx = rx2
+            rw = rx1+rw1-rx2
+        else:
+            rx = rx1
+            rw = rw2+rx2-rx1
+    
     bx, by, bw, bh = cv2.boundingRect(max_contourB)
     centerX, centerY = gx+gw/2, gy+gh/2
-    
+    #print("green: ",max_areaG)
+    #print("red: ",max_areaR)
     cv2.rectangle(bin_image4, (gx, gy), (gx+gw, gy+gh), (255, 0, 0), 2)
-    cv2.rectangle(bin_image4, (rx, ry), (rx+rw, ry+rh), (255, 0, 0), 2)
+    cv2.rectangle(bin_image4, (rx1, ry1), (rx1+rw1, ry1+rh1), (255, 0, 0), 2)
+    cv2.rectangle(bin_image4, (rx2, ry2), (rx2+rw2, ry2+rh2), (255, 0, 0), 2)
     cv2.rectangle(bin_image4, (bx, by), (bx+bw, by+bh), (255, 0, 0), 2)
-
-    RX1, RX2 = rx+rh/2, rx+rw
-    BX1, BX2 = bx+bh/2, bx+bw
     
     
+    #원영역 안에 원통 중심좌표 있을 경우
+    inside = False
     
+    if second_areaR ==-1 and gx > rx and gx < rx+rw:
+        inside = True
+    elif second_areaR !=-1:
+        inside = False
     
+    '''
+    if inside:
+        print("I")
+    else:
+        print("O")
+    '''
     # 결과 연산, 시리얼 통신
     ras_res = ""
+    #안 보일 시
+    if(gx==0):
+        ras_res = "999"
+    else:
+        ras_res = ras_res+str(gx)
+    
     if(len(contours_green) != 0): #contours 존재하면
         if(max_areaG < green_small):
-            if(centerX < W_View_size * 4 / 11):
-                ras_res += "1,1"
-            elif(W_View_size * 4 / 11 <= centerX <= W_View_size * 7 / 11):
-                ras_res += "2,1"
-            elif(W_View_size * 7 / 11 < centerX):
-                ras_res += "3,1"
+            ras_res += ",1"
         elif(green_small <= max_areaG <= green_middle):
-            if(centerX < W_View_size * 4 / 11):
-                ras_res += "1,2"
-            elif(W_View_size * 4 / 11 <= centerX <= W_View_size * 7 / 11):
-                ras_res += "2,2"
-            elif(W_View_size * 7 / 11 < centerX):
-                ras_res += "3,2"
+            ras_res += ",2"
         elif(green_middle <= max_areaG <= green_big):
-            if(centerX < W_View_size * 4 / 11):
-                ras_res += "1,3"
-            elif(W_View_size * 4 / 11 <= centerX <= W_View_size * 7 / 11):
-                ras_res += "2,3"
-            elif(W_View_size * 7 / 11 < centerX):
-                ras_res += "3,3"
+            ras_res += ",3"
         elif(green_big < max_areaG):
-            if(centerX < W_View_size * 4 / 11):
-                ras_res += "1,4"
-            elif(W_View_size * 4 / 11 <= centerX <= W_View_size * 7 / 11):
-                ras_res += "2,4"
-            elif(W_View_size * 7 / 11 < centerX):
-                ras_res += "3,4"
+            ras_res += ",4"
             #print(ras_res)
     #elif((centerX!=0 and centerY!=0) and (len(contours) ==0)): 여기서 좀 더 세부적으로 나눌거임.
         #ras_res += "9,9"
     else: #contours 없으면
-        ras_res += "9,9"
+        ras_res += ",9"
         #print(ras_res)
-    ras_res += ",9/"
+    
+    #원통이 빨간 원 안에 있으면 마지막 자리 0, 아니면 1
+    if inside:
+        ras_res += ",0/"
+    else:
+        ras_res += ",1/"
+    
     
     #servo_move(ang)
 
@@ -223,8 +252,9 @@ while True:
     fps = 1/sec
     FPS.append(fps)
     count=count+1
-    if(count==20):
-        print("평균 fps:",np.mean(FPS))
+    if(count==40):
+        print("평균 fps:", np.mean(FPS))
+        # print("최소 fps:", np.min(FPS))
         FPS=[]
         count=0
     #prevTime = curTime    

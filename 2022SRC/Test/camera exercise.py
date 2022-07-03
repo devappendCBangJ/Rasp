@@ -73,7 +73,7 @@ while (True):
         else:
             # print("case3")                     # 그 밖의 부분은 경계를 구분할 필요가 없음.
             lower1 = np.array([hsv1[0], thresholdLs1, thresholdLv1])
-            upper1 = np.array([hsv1[0] + 10, thresholdUs1, thresholdUv1])
+            upper1 = np.array([hsv1[0]+10, thresholdUs1, thresholdUv1])
             lower2 = np.array([hsv1[0] - 10, thresholdLs1, thresholdLv1])
             upper2 = np.array([hsv1[0], thresholdUs1, thresholdUv1])
             lower3 = np.array([hsv1[0] - 10, thresholdLs1, thresholdLv1])

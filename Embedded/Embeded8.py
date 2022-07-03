@@ -140,7 +140,6 @@ while (True):
                 max_centerY_r = centerY_r
         if max_area_r > 100:  # 크기가 80 이상이면 동그라미, 사각형인정
             cv.circle(img_color, (max_centerX_r, max_centerY_r), 10, (0, 0, 255), 10)
-            # cv.rectangle(img_color, (x, y), (x + width, y + height), (0, 0, 255))
             if max_centerX_r < 135:
                 state_data = "0"
             elif (135 < max_centerX_r < 185):
@@ -200,6 +199,7 @@ while (True):
                 charactor = list(state_data)
                 charactor[2] = '2'
                 state_data = "".join(charactor)
+                
         else:
             state_data += ",9"
     ###########################3 색깔 초록 #################################
@@ -245,7 +245,7 @@ while (True):
     if colorMode != 0:
         state_data += ",9"
     state_data += "/"
-    #print(max_area_g, state_data)
+    print(state_data)
     ser.write(bytes(state_data, encoding='ascii'))
     cv.imshow('img_color0', img_color)
 

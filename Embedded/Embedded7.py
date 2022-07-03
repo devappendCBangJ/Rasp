@@ -23,15 +23,25 @@ isEnd = 0  # 안끝났음 isEnd =1 끝났음
 servo_stop = "0"
 rx=''
 
-##################################################################
-lower_green = (28, 13, 12)
-upper_green = (49, 255, 255)
-lower_red = (160, 103, 170)
-upper_red = (180, 224, 255)
-lower_red_or = (0, 103, 170)
-upper_red_or = (3, 224, 255)
-lower_blue = (120, 52, 150)
-upper_blue = (135, 221, 255)
+################ hsv night##################################################
+# lower_green = (56, 72, 69)
+# upper_green = (76, 255, 255)
+# lower_red = (163, 178, 104)
+# upper_red = (180, 255, 255)
+# lower_red_or = (0, 178, 104)
+# upper_red_or = (3, 255, 255)
+# lower_blue = (96, 74, 73)
+# upper_blue = (116, 255, 255)
+####################hsv noon############################
+lower_green = (55, 68, 35)
+upper_green = (75, 255, 255)
+lower_red = (163, 89, 49)
+upper_red = (180, 255, 255)
+lower_red_or = (0, 89, 49)
+upper_red_or = (3, 255, 255)
+lower_blue = (97, 68, 53)
+upper_blue = (116, 255, 255)
+######################################################################
 # lower_yellow = (15, 125, 97)
 # upper_yellow = (30, 255, 255)
 max_area_which = 0
@@ -57,32 +67,18 @@ def which_color():  # 어떤 컬러가 포착 됬는지
     img_mask_redSum = cv.morphologyEx(img_mask_redSum, cv.MORPH_CLOSE, kernel)
     img_mask_b = cv.morphologyEx(img_mask_b, cv.MORPH_OPEN, kernel)
     img_mask_b = cv.morphologyEx(img_mask_b, cv.MORPH_CLOSE, kernel)
-    # img_mask_g = cv.morphologyEx(img_mask_g, cv.MORPH_OPEN, kernel)
-    # img_mask_g = cv.morphologyEx(img_mask_g, cv.MORPH_CLOSE, kernel)
 
     if np.any(img_mask_redSum > 0) == 1:
         state_data = "1,9,9"
-        # servo_stop = "1"
-        # print(state_data)
         t.sleep(1.5)
         isColored = 1
         colorMode = 1
 
     elif np.any(img_mask_b > 0) == 1:
-        # servo_stop = "1"
         state_data = "1,9,9"
-        # print(state_data)
         t.sleep(1.5)
         isColored = 1
         colorMode = 2
-
-    # if np.any(img_mask_g > 0) == 1:
-    #     # servo_stop = "1"            #서보동작 멈춰라
-    #     state_data = "1,9,9"
-    #     # print(state_data)
-    #     t.sleep(1.5)
-    #     isColored = 1
-    #     colorMode = 3
 
 
 ########################################
@@ -92,17 +88,16 @@ if ser.isOpen() == False:
 ######################################################################
 while (True):
     state_data = "9"  # 서보모터 다시 움직여라 신호     #state_data (물체의 방향(왼쪽 0, 가운데 1, 오른쪽 2), 크기(작음 : 0,정렬 : 1,잡아 : 2), 9)
-    # ser.write(bytes(servo_stop, encoding='ascii'))   서보모터 다시 움직여도 된다는 신호
 
     ret, img_color = cap.read()  # frame 가로 *세로 *3 으로 표현 ==> 카메라 값 읽어 들이기
-
+    height, width = img_color.shape[:2]
+    img_color = cv.resize(img_color, (width, height), interpolation=cv.INTER_AREA)
     img_hsv = cv.cvtColor(img_color, cv.COLOR_BGR2HSV)  # hsv 컬러 변환
 
     ########################색 입력 ########################################
     if isColored == 0 and isGraped == "0":
         which_color()
 
-    # ser.write(bytes(servo_stop, encoding='ascii'))    #서보모터 멈추라는 신호
     if ser.readable():
         ser.timeout = 0
         rx = ser.read().decode()
@@ -119,7 +114,7 @@ while (True):
         img_mask_red_or = cv.inRange(img_hsv, lower_red_or, upper_red_or)
         img_mask_redSum = img_mask_red | img_mask_red_or
         img_mask_t = img_mask_redSum
-        kernel = np.ones((3, 3), np.uint8)  # 모폴로지  노이즈 필터링
+        kernel = np.ones((5, 5), np.uint8)  # 모폴로지  노이즈 필터링
         img_mask_t = cv.morphologyEx(img_mask_t, cv.MORPH_OPEN, kernel)
         img_mask_t = cv.morphologyEx(img_mask_t, cv.MORPH_CLOSE, kernel)
 
@@ -135,7 +130,7 @@ while (True):
                 max_area_r = area
                 max_centerX_r = centerX_r
                 max_centerY_r = centerY_r
-        if max_area_r > 20:  # 크기가 80 이상이면 동그라미, 사각형인정
+        if max_area_r > 150:  # 크기가 80 이상이면 동그라미, 사각형인정
             cv.circle(img_color, (max_centerX_r, max_centerY_r), 10, (0, 0, 255), 10)
             # cv.rectangle(img_color, (x, y), (x + width, y + height), (0, 0, 255))
             if max_centerX_r < 120:
@@ -162,7 +157,7 @@ while (True):
     max_area_b = 0
     if colorMode == 2 and isColored == 1 and isGraped == "0":  # 파란색
         img_mask_t = cv.inRange(img_hsv, lower_blue, upper_blue)
-        kernel = np.ones((3, 3), np.uint8)  # 모폴로지  노이즈 필터링
+        kernel = np.ones((5, 5), np.uint8)  # 모폴로지  노이즈 필터링
         img_mask_t = cv.morphologyEx(img_mask_t, cv.MORPH_OPEN, kernel)
         img_mask_t = cv.morphologyEx(img_mask_t, cv.MORPH_CLOSE, kernel)
         _, _, stats_b, centroids_b = cv.connectedComponentsWithStats(img_mask_t)
@@ -180,7 +175,7 @@ while (True):
                 max_centerX_b = centerX_b
                 max_centerY_b = centerY_b
 
-        if max_area_b > 20:  # 크기가 80 이상이면 동그라미, 사각형인정
+        if max_area_b > 150:  # 크기가 80 이상이면 동그라미, 사각형인정
             cv.circle(img_color, (max_centerX_b, max_centerY_b), 10, (0, 0, 255), 10)
             if max_centerX_b < 120:
                 state_data = "0"
@@ -207,7 +202,7 @@ while (True):
     max_area_g = 0
     if isGraped == "1":
         img_mask_t = cv.inRange(img_hsv, lower_green, upper_green)
-        kernel = np.ones((3, 3), np.uint8)  # 모폴로지  노이즈 필터링
+        kernel = np.ones((5, 5), np.uint8)  # 모폴로지  노이즈 필터링
         img_mask_t = cv.morphologyEx(img_mask_t, cv.MORPH_OPEN, kernel)
         img_mask_t = cv.morphologyEx(img_mask_t, cv.MORPH_CLOSE, kernel)
         _, _, stats_g, centroids_g = cv.connectedComponentsWithStats(img_mask_t)
@@ -223,7 +218,7 @@ while (True):
                 max_area_g = area
                 max_centerX_g = centerX_g
                 max_centerY_g = centerY_g
-        if max_area_g > 50:  # 크기가 80 이상이면 동그라미, 사각형인정
+        if max_area_g > 80:  # 크기가 80 이상이면 동그라미, 사각형인정
             cv.circle(img_color, (max_centerX_g, max_centerY_g), 10, (0, 0, 255), 10)
             if max_centerX_g < 120:
                 state_data = "0"
@@ -286,7 +281,7 @@ while (True):
     if colorMode != 0:
         state_data += ",9"
     state_data += "/"
-    print(max_area_g, state_data)
+    print(state_data)
     ser.write(bytes(state_data, encoding='ascii'))
     cv.imshow('img_color0', img_color)
 
