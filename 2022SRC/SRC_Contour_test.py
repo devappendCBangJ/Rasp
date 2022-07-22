@@ -55,20 +55,28 @@ lower_green = (55,60,110)
 upper_green = (75,255,230)
 '''
 #green
-lower_green = (54,110,80)
-upper_green = (65,215,195)
+lower_green1 = (59,110,135)
+upper_green1 = (70,223,255)
 
+lower_green2 = (60,90,120)
+upper_green2 = (65,235,255)
+
+'''
+lower_green3 = (69,95,79)
+upper_green3 = (77,150,120)
+'''
 #blue
 lower_blue = (102, 150, 90)
 upper_blue = (110, 255, 200)
 #red
-lower_red1 = (1, 130, 150)
-upper_red1 = (4, 175, 230)
 
-lower_red2 = (0, 125, 130)
-upper_red2 = (1, 175, 200)
+lower_red1 = (1, 107, 180)
+upper_red1 = (6, 190, 245)
+
+lower_red2 = (0, 100, 200)
+upper_red2 = (3, 193, 235)
 # 원통 크기 기준, 통신 데이터 리스트
-green_small = W_View_size * H_View_size * 0.0005
+green_small = W_View_size * H_View_size * 0.0007
 green_middle = W_View_size * H_View_size * 0.0025
 green_big = W_View_size * H_View_size * 0.005834
 ras_res= ""
@@ -150,29 +158,41 @@ while True:
         continue
     # hsv 변환, 노이즈제거, 마스크형성
     img_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    bin_image1 = Masking(img_hsv,lower_green,upper_green)
-    bin_image2 = Masking(img_hsv,lower_blue,upper_blue)
+    bin_image1 = Masking(img_hsv,lower_green1,upper_green1)|Masking(img_hsv,lower_green2,upper_green2)
+    #bin_image2 = Masking(img_hsv,lower_blue,upper_blue)
     bin_image3 = Masking(img_hsv,lower_red1,upper_red1)|Masking(img_hsv,lower_red2,upper_red2)
-    bin_image4 = bin_image1|bin_image2|bin_image3
-
+    '''
+    roi = bin_image3[120:,:]
+    res = np.zeros([120,400],dtype=np.uint8)
+    bin_image3 = np.vstack((res,roi))
+    '''
+    #bin_image4 = bin_image1|bin_image2|bin_image3
+    bin_image4 = bin_image1|bin_image3
+    
+    roi = bin_image3[120:,:]
     #컨투어
     contours_green, _ = cv2.findContours(bin_image1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    contours_red, _ = cv2.findContours(bin_image3, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    contours_blue, _ = cv2.findContours(bin_image2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    
+    contours_red, _ = cv2.findContours(roi, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    #contours_blue, _ = cv2.findContours(bin_image2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     
     
     #컨투어 영역 제일 넓은 부분만 구하기(빨간색은 2번쨰까지)
     max_areaG, max_contourG = get_contour(contours_green)
+    #print(max_areaG,green_small)
     max_areaR, max_contourR, second_areaR, second_contourR = get_contour_red(contours_red)
-    max_areaB, max_contourB = get_contour(contours_blue)
+    #max_areaB, max_contourB = get_contour(contours_blue)
     gx, gy, gw, gh = cv2.boundingRect(max_contourG)
     rx1, ry1, rw1, rh1 = cv2.boundingRect(max_contourR)
     rx2, ry2, rw2, rh2 = cv2.boundingRect(second_contourR)
-
+    ry1=ry1+120
+    ry2=ry2+120
+    
+    #빨간색 컨투어가 1개만 잡히면
     if second_areaR == -1:
         rx = rx1
         rw = rw1
-        inside = True
+    #빨간색 컨투어가 2개 잡히면
     else:
         if rx1 > rx2:
             rx = rx2
@@ -181,22 +201,20 @@ while True:
             rx = rx1
             rw = rw2+rx2-rx1
     
-    bx, by, bw, bh = cv2.boundingRect(max_contourB)
+    #bx, by, bw, bh = cv2.boundingRect(max_contourB)
     centerX, centerY = gx+gw/2, gy+gh/2
     #print("green: ",max_areaG)
     #print("red: ",max_areaR)
     cv2.rectangle(bin_image4, (gx, gy), (gx+gw, gy+gh), (255, 0, 0), 2)
     cv2.rectangle(bin_image4, (rx1, ry1), (rx1+rw1, ry1+rh1), (255, 0, 0), 2)
     cv2.rectangle(bin_image4, (rx2, ry2), (rx2+rw2, ry2+rh2), (255, 0, 0), 2)
-    cv2.rectangle(bin_image4, (bx, by), (bx+bw, by+bh), (255, 0, 0), 2)
+    #cv2.rectangle(bin_image4, (bx, by), (bx+bw, by+bh), (255, 0, 0), 2)
     
     
     #원영역 안에 원통 중심좌표 있을 경우
-    inside = False
-    
-    if second_areaR ==-1 and gx > rx and gx < rx+rw:
+    if gx > rx and gx < rx+rw:
         inside = True
-    elif second_areaR !=-1:
+    else:
         inside = False
     
     '''
@@ -241,7 +259,7 @@ while True:
     ser.write(ras_res.encode())
 
 
-    #cv2.imshow('frame', frame)
+    cv2.imshow('frame', frame)
     cv2.imshow('dst', bin_image4)
     
     
